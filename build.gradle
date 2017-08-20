@@ -1,0 +1,125 @@
+apply plugin: 'java'
+sourceCompatibility = 1.8
+
+configurations {
+    nativeLibs
+}
+
+def robotClass = "org.archwood.frc2607.MyRobot"
+def rioIPAddr = "10.26.7.2"
+
+repositories {
+    mavenCentral()
+    maven {
+        url "http://first.wpi.edu/FRC/roborio/maven/release"
+    }
+    maven {
+        url "http://github.com/robovikings2607/maven/raw/master"
+    }
+}
+
+dependencies {
+    compile 'edu.wpi.first.wpilibj:athena:2017.3.1'
+    compile 'org.opencv:opencv-java:3.1.0'    
+    compile 'edu.wpi.first.wpilib.networktables.java:NetworkTables:3.1.7:arm'
+    compile 'com.kauailabs:navx-mxp:3.0.329'
+    compile 'com.ctre:CTRLib:4.4.1.14' 
+    nativeLibs 'com.ctre:CTRLib:4.4.1.14:native@zip'
+    nativeLibs 'edu.wpi.first.wpilib:athena-runtime:2017.3.1'
+    nativeLibs 'edu.wpi.first.wpilibj:athena-jni:2017.3.1'
+    nativeLibs 'org.opencv:opencv-jni:3.1.0:linux-arm'
+    nativeLibs 'org.opencv:opencv-natives:3.1.0:linux-arm'
+//    nativeLibs 'edu.wpi.cscore.java:cscore:1.0.2:athena-uberzip@zip'
+//    compile 'edu.wpi.first.wpilib:hal:2017.3.1'
+}
+
+/*
+=====================================================================================================================================
+shouldn't need to change anything below this point
+=====================================================================================================================================
+*/
+buildscript {
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        classpath 'org.hidetake:gradle-ssh-plugin:latest.release'
+    }
+}
+
+apply plugin: 'idea'
+apply plugin: 'eclipse'
+apply plugin: 'org.hidetake.ssh'
+
+idea.module.downloadJavadoc = true
+eclipse.classpath.downloadJavadoc = true
+//ssh.settings.dryRun = true
+
+remotes {
+    roboRIOAdmin {
+        host = rioIPAddr
+        user = "admin"
+        knownHosts = allowAnyHosts
+    }
+    roboRIOLVUser {
+        host = rioIPAddr
+        user = "lvuser"
+        knownHosts = allowAnyHosts
+    }
+}
+
+// adjust jar task to build an FRCUserProgram.jar with the required manifest and library jars expanded into it
+//	NOTE:  this is how the robotCommand expects the jar;  any reason why not to just add library jars to the manifest classpath?
+jar {
+    archiveName = "FRCUserProgram.jar"
+    configurations.compile.each {
+        from (zipTree(it).matching {include '**/*.class'})
+    }
+    manifest.attributes (
+            "Main-Class": "edu.wpi.first.wpilibj.RobotBase",
+            "Robot-Class": robotClass,
+            "Class-Path": "."
+    )
+}
+
+
+task("testStuff", dependsOn: jar) {
+doLast {
+  	println('test stuff')
+}}
+
+
+// scp robot program (FRCUserProgram.jar) to rio with dependencies, and start it
+task("deploy", dependsOn: jar) {
+    // scp the native library dependencies
+    //      NOTE:  there shouldn't be any reason to do this everytime, only once;  but doing it everytime allows
+    //              switching robot languages without re-imaging
+    doLast {
+    	ssh.run {
+    	    session(remotes.roboRIOAdmin) {
+    		configurations.nativeLibs.each { libFile-> zipTree(libFile).matching {include '**/*.so' include '**/*.so.3.1'}.each { soFile -> 
+    			println "deploying: ${soFile.name}"
+    	  	    	put from: soFile, into: '/usr/local/frc/lib/'
+    	  	}}
+    	        execute 'ldconfig'
+    	        execute 'killall -q netconsole-host || :'
+    	    }
+    	}
+    // scp the robot program FRCUserProgram.jar
+    //  NOTE:  the ant build.xml also copies over the netconsole-host binary, and robotCommand shell script;
+    //          skip doing this for now (should just be able to do once manually
+    //          robotCommand goes into /home/lvuser
+    //          netconsole-host goes into /usr/local/frc/bin
+    	ssh.run {
+    	    session(remotes.roboRIOLVUser) {
+    	    	println "deploying: ${jar.archivePath}"
+    	        put from: jar.archivePath, into: '/home/lvuser/'
+    	        println "killing old program"
+    	        execute '. /etc/profile.d/natinst-path.sh; /usr/local/frc/bin/frcKillRobot.sh -t -r'
+    	        println "running sync"
+    	        execute 'sync'
+    	    }
+    	}
+    }
+}
+
