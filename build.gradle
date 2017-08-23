@@ -24,7 +24,7 @@ dependencies {
     compile 'edu.wpi.first.wpilib.networktables.java:NetworkTables:3.1.7:arm'
     compile 'com.kauailabs:navx-mxp:3.0.329'
     compile 'com.ctre:CTRLib:4.4.1.14' 
-    nativeLibs 'com.ctre:CTRLib:4.4.1.14:native@zip'
+    nativeLibs 'com.ctre:CTRLib-natives:4.4.1.14'
     nativeLibs 'edu.wpi.first.wpilib:athena-runtime:2017.3.1'
     nativeLibs 'edu.wpi.first.wpilibj:athena-jni:2017.3.1'
     nativeLibs 'org.opencv:opencv-jni:3.1.0:linux-arm'
@@ -43,7 +43,7 @@ buildscript {
         jcenter()
     }
     dependencies {
-        classpath 'org.hidetake:gradle-ssh-plugin:latest.release'
+        classpath 'org.hidetake:gradle-ssh-plugin:2.9.0'
     }
 }
 
